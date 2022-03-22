@@ -1,4 +1,5 @@
 use std::{
+	collections::BTreeSet,
 	rc::Rc,
 	sync::{Arc, Mutex},
 	time::SystemTime,
@@ -7,12 +8,9 @@ use std::{
 use custard_macros::{attach_datachunk, attach_task};
 
 use custard_use::{
+	concurrency::possibly_poisoned_mutex::PossiblyPoisonedMutex,
 	errors::task_composition_errors::custard_not_in_cycle_error::CustardNotInCycleError,
-	identify::{
-		crate_name::CrateName,
-		custard_name::CustardName,
-		task_name::{FullTaskName, TaskName},
-	},
+	identify::task_name::FullTaskName,
 	user_types::{
 		datachunk::Datachunk,
 		task::{TaskClosureType, TaskData, TaskImpl},
@@ -53,13 +51,13 @@ fn set_time_default() -> Mutex<SystemTime> {
 
 impl TaskImpl for TestTaskAImpl {
 	fn handle_control_flow_update(&self, _task_data: &dyn TaskData, _this_name: &FullTaskName, _other_name: &FullTaskName, _control_flow: &TaskControlFlow) -> bool {
-		//any kind of control flow update causes this to quit
-		true
+		//any kind of control flow update causes this to quit (not)
+		false
 	}
 
 	fn run(&self, _task_data: &dyn TaskData, task_name: FullTaskName) -> TaskClosureType {
-		Box::new(Mutex::new(move |data: Arc<Mutex<dyn TaskData>>| {
-			let object = data.lock().unwrap();
+		Box::new(Mutex::new(move |data: Arc<PossiblyPoisonedMutex<dyn TaskData>>| {
+			let object = data.lock();
 			let data = object.downcast_ref::<TestTaskAData>().unwrap();
 			let mut counter = data.counter.lock().unwrap();
 			let mut time = data.time.lock().unwrap();
@@ -83,7 +81,11 @@ impl TaskImpl for TestTaskAImpl {
 				"c" => TaskControlFlow::Continue,
 				"e" => TaskControlFlow::Err(Rc::new(CustardNotInCycleError { offending_task: task_name.clone() })),
 				"f" => TaskControlFlow::FullReload,
-				"p" => TaskControlFlow::PartialReload,
+				"p" => TaskControlFlow::PartialReload({
+					let mut set = BTreeSet::new();
+					// set.insert(task_name.crate_name.clone());
+					Arc::new(set)
+				}),
 				"a" => TaskControlFlow::StopAll,
 				"s" => TaskControlFlow::StopThis,
 				"!" => panic!("user-triggered panic"),
