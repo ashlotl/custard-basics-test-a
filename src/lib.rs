@@ -13,7 +13,7 @@ use custard_use::{
 	identify::task_name::FullTaskName,
 	user_types::{
 		datachunk::Datachunk,
-		task::{TaskClosureType, TaskData, TaskImpl},
+		task::{TaskClosureType, Taskable},
 		task_control_flow::task_control_flow::TaskControlFlow,
 	},
 };
@@ -32,33 +32,28 @@ impl Datachunk for TestDatachunkA {}
 attach_datachunk!(TestDatachunkA);
 
 #[derive(Debug, Deserialize)]
-pub struct TestTaskAData {
+pub struct TestTaskA {
 	counter: Mutex<u32>,
 	funny_string: String,
 	#[serde(default = "set_time_default")]
 	time: Mutex<SystemTime>,
 }
 
-impl TaskData for TestTaskAData {}
-
-#[derive(Debug)]
-pub struct TestTaskAImpl();
-
 fn set_time_default() -> Mutex<SystemTime> {
 	//we're actually going to completely ignore this initial value in order to get a more accurate result, but consider it a tutorial
 	Mutex::new(SystemTime::now())
 }
 
-impl TaskImpl for TestTaskAImpl {
-	fn handle_control_flow_update(&self, _task_data: &dyn TaskData, _this_name: &FullTaskName, _other_name: &FullTaskName, _control_flow: &TaskControlFlow) -> bool {
+impl Taskable for TestTaskA {
+	fn handle_control_flow_update(&mut self, _this_name: &FullTaskName, _other_name: &FullTaskName, _control_flow: &TaskControlFlow) -> bool {
 		//any kind of control flow update causes this to quit (not)
 		false
 	}
 
-	fn run(&self, _task_data: &dyn TaskData, task_name: FullTaskName) -> TaskClosureType {
-		Box::new(Mutex::new(move |data: Arc<PossiblyPoisonedMutex<dyn TaskData>>| {
+	fn run(&mut self, task_name: FullTaskName) -> TaskClosureType {
+		Box::new(Mutex::new(move |data: Arc<PossiblyPoisonedMutex<dyn Taskable>>| {
 			let object = data.lock();
-			let data = object.downcast_ref::<TestTaskAData>().unwrap();
+			let data = object.downcast_ref::<TestTaskA>().unwrap();
 			let mut counter = data.counter.lock().unwrap();
 			let mut time = data.time.lock().unwrap();
 
@@ -98,10 +93,10 @@ impl TaskImpl for TestTaskAImpl {
 	}
 }
 
-impl Drop for TestTaskAData {
+impl Drop for TestTaskA {
 	fn drop(&mut self) {
 		println!("drop works: {}", self.funny_string)
 	}
 }
 
-attach_task!["TestTaskAImpl:TestTaskAData"];
+attach_task!(TestTaskA);
