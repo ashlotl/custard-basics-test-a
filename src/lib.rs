@@ -34,15 +34,10 @@ attach_datachunk!(TestDatachunkA);
 
 #[derive(Debug, Deserialize)]
 pub struct TestTaskA {
-	counter: Mutex<u32>,
+	counter: u32,
 	funny_string: String,
-	#[serde(default = "set_time_default")]
-	time: Mutex<SystemTime>,
-}
-
-fn set_time_default() -> Mutex<SystemTime> {
-	//we're actually going to completely ignore this initial value in order to get a more accurate result, but consider it a tutorial
-	Mutex::new(SystemTime::now())
+	#[serde(default = "SystemTime::now")]
+	time: SystemTime,
 }
 
 impl Taskable for TestTaskA {
@@ -62,18 +57,16 @@ impl Taskable for TestTaskA {
 				println!("{}, {}, {}", v.field_a, v.field_b, v.field_c);
 			}
 
-			let object = data.lock();
-			let data = object.downcast_ref::<TestTaskA>().unwrap();
-			let mut counter = data.counter.lock().unwrap();
-			let mut time = data.time.lock().unwrap();
+			let mut object = data.lock();
+			let data = object.downcast_mut::<TestTaskA>().unwrap();
 
-			if *counter == 0 {
-				*time = SystemTime::now();
+			if data.counter == 0 {
+				data.time = SystemTime::now();
 			}
 
-			*counter += 1;
+			data.counter += 1;
 
-			println!("Counter: {}", counter);
+			println!("Counter: {}", data.counter);
 			println!("Enter your option and press enter:\nContinue (c)\nError(e)\nFullReload(f)\nPartialReload(p)\nStopAll(a)\nStopThis(s)\npanic(!)\n");
 
 			let mut input_string = "".to_owned();
